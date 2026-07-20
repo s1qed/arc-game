@@ -506,27 +506,42 @@
   }
 
   async function ensureArcNetwork(){
+    const addChainParams = [{
+      chainId: ARC_TESTNET.chainIdHex,
+      chainName: ARC_TESTNET.chainName,
+      nativeCurrency: ARC_TESTNET.nativeCurrency,
+      rpcUrls: ARC_TESTNET.rpcUrls,
+      blockExplorerUrls: ARC_TESTNET.blockExplorerUrls,
+    }];
+
     try{
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
         params: [{ chainId: ARC_TESTNET.chainIdHex }],
       });
+      return;
     } catch(switchErr){
-      // 4902 = сеть ещё не добавлена в кошелёк
-      if (switchErr.code === 4902){
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId: ARC_TESTNET.chainIdHex,
-            chainName: ARC_TESTNET.chainName,
-            nativeCurrency: ARC_TESTNET.nativeCurrency,
-            rpcUrls: ARC_TESTNET.rpcUrls,
-            blockExplorerUrls: ARC_TESTNET.blockExplorerUrls,
-          }],
-        });
-      } else {
+      // 4902 — стандартный код "сеть не добавлена". Но некоторые кошельки
+      // (не MetaMask) не следуют стандарту и возвращают другой код/текст,
+      // поэтому дополнительно проверяем сообщение об ошибке как fallback.
+      const looksUnrecognized =
+        switchErr.code === 4902 ||
+        (switchErr.message && /unrecognized chain|not.*added|4902/i.test(switchErr.message));
+
+      if (!looksUnrecognized){
         throw switchErr;
       }
+    }
+
+    // Сеть не была распознана — пробуем добавить её напрямую.
+    // wallet_addEthereumChain сам переключает кошелёк на добавленную сеть.
+    try{
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: addChainParams,
+      });
+    } catch(addErr){
+      throw addErr;
     }
   }
 
