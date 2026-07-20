@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ARC CATCH — ончейн-аркада на Arc</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#0A0E12;
+    --panel:#121821;
+    --panel-border:#1E2731;
+    --teal:#17E3B0;
+    --amber:#FFB454;
+    --danger:#FF5D5D;
+    --text:#E8EEF3;
+    --muted:#6E7A87;
+    --arcade: 'Press Start 2P', monospace;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg-deep);color:var(--text);font-family:var(--mono);}
+  body{
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(23,227,176,0.07), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(255,180,84,0.05), transparent 40%);
+  }
+
+  /* ---------- signature ticker ---------- */
+  .ticker{
+    border-bottom:1px solid var(--panel-border);
+    background:#0D1319;
+    overflow:hidden;
+    white-space:nowrap;
+    padding:8px 0;
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:0.5px;
+  }
+  .ticker__track{
+    display:inline-block;
+    padding-left:100%;
+    animation:scroll 18s linear infinite;
+  }
+  .ticker__track span{margin-right:48px;}
+  .ticker__track .dot{color:var(--teal);}
+  @keyframes scroll{
+    0%{transform:translateX(0);}
+    100%{transform:translateX(-100%);}
+  }
+
+  header{
+    padding:28px clamp(16px,4vw,48px) 8px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  h1{
+    font-family:var(--arcade);
+    font-size:clamp(16px,2.4vw,22px);
+    margin:0;
+    color:var(--teal);
+    text-shadow:0 0 18px rgba(23,227,176,0.35);
+  }
+  h1 small{display:block;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px;letter-spacing:1px;text-transform:uppercase;}
+
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns:minmax(280px,420px) 300px;
+    gap:24px;
+    padding:8px clamp(16px,4vw,48px) 40px;
+    justify-content:center;
+  }
+  @media (max-width:820px){
+    main{grid-template-columns:1fr;}
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    padding:16px;
+  }
+
+  /* ---------- game ---------- */
+  .game-panel{position:relative;display:flex;flex-direction:column;gap:12px;}
+  .hud{display:flex;justify-content:space-between;align-items:center;font-family:var(--arcade);font-size:11px;}
+  .hud .score{color:var(--amber);}
+  .hud .lives span{color:var(--danger);margin-left:4px;}
+  #gameCanvas{
+    width:100%;
+    aspect-ratio: 4 / 5;
+    background:
+      linear-gradient(180deg, rgba(23,227,176,0.04), transparent 40%),
+      #0B1016;
+    border-radius:8px;
+    border:1px solid var(--panel-border);
+    touch-action:none;
+    cursor:pointer;
+    display:block;
+  }
+  .game-msg{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    text-align:center;
+    background:rgba(10,14,18,0.82);
+    border-radius:8px;
+    padding:20px;
+  }
+  .game-msg[hidden]{display:none;}
+  .game-msg h2{font-family:var(--arcade);font-size:14px;color:var(--teal);margin:0;}
+  .game-msg p{color:var(--muted);font-size:12px;max-width:280px;line-height:1.6;margin:0;}
+
+  button{
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:12px;
+    letter-spacing:0.4px;
+    padding:11px 18px;
+    border-radius:6px;
+    border:1px solid transparent;
+    cursor:pointer;
+    transition:transform .08s ease, filter .15s ease;
+  }
+  button:active{transform:translateY(1px);}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-primary{background:var(--teal);color:#04140F;}
+  .btn-primary:hover:not(:disabled){filter:brightness(1.08);}
+  .btn-ghost{background:transparent;color:var(--text);border-color:var(--panel-border);}
+  .btn-ghost:hover:not(:disabled){border-color:var(--teal);color:var(--teal);}
+
+  .controls-hint{font-size:10.5px;color:var(--muted);text-align:center;}
+
+  /* ---------- sidebar ---------- */
+  .sidebar{display:flex;flex-direction:column;gap:16px;}
+  .panel h3{
+    font-family:var(--arcade);
+    font-size:10px;
+    margin:0 0 12px;
+    color:var(--text);
+    letter-spacing:0.5px;
+  }
+  .wallet-row{display:flex;flex-direction:column;gap:10px;font-size:12px;}
+  .kv{display:flex;justify-content:space-between;gap:8px;color:var(--muted);}
+  .kv b{color:var(--text);font-weight:500;}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--danger);display:inline-block;margin-right:6px;}
+  .status-dot.on{background:var(--teal);box-shadow:0 0 8px rgba(23,227,176,0.7);}
+
+  .leaderboard-list{list-style:none;margin:0;padding:0;font-size:12px;}
+  .leaderboard-list li{
+    display:flex;
+    justify-content:space-between;
+    padding:7px 0;
+    border-bottom:1px dashed var(--panel-border);
+    color:var(--muted);
+  }
+  .leaderboard-list li:last-child{border-bottom:none;}
+  .leaderboard-list li b{color:var(--text);}
+  .leaderboard-list .rank{color:var(--amber);width:22px;display:inline-block;}
+  .leaderboard-empty{color:var(--muted);font-size:11.5px;}
+
+  .submit-row{display:flex;flex-direction:column;gap:10px;margin-top:4px;}
+  .tx-note{font-size:10.5px;color:var(--muted);line-height:1.5;}
+  .tx-note a{color:var(--teal);}
+
+  footer{
+    padding:16px clamp(16px,4vw,48px) 28px;
+    color:var(--muted);
+    font-size:10.5px;
+    text-align:center;
+    border-top:1px solid var(--panel-border);
+  }
+  footer code{color:var(--teal);}
+</style>
+</head>
+<body>
+
+<div class="ticker">
+  <div class="ticker__track" id="tickerTrack">
+    <span><span class="dot">●</span> ARC CATCH — ловите монеты, фиксируйте рекорд в блокчейне</span>
+    <span><span class="dot">●</span> подключите кошелёк, чтобы синхронизироваться с сетью Arc</span>
+    <span><span class="dot">●</span> Arc Testnet · chainId 5042002 · газ оплачивается в USDC</span>
+  </div>
+</div>
+
+<header>
+  <h1>ARC CATCH<small>ончейн-аркада · Solidity + Arc (Circle L1)</small></h1>
+</header>
+
+<main>
+  <section class="panel game-panel">
+    <div class="hud">
+      <div class="score">SCORE <span id="scoreVal">0</span></div>
+      <div class="lives">LIVES <span id="livesVal">●●●</span></div>
+    </div>
+
+    <div style="position:relative;">
+      <canvas id="gameCanvas" width="420" height="525"></canvas>
+
+      <div class="game-msg" id="startMsg">
+        <h2>ARC CATCH</h2>
+        <p>Ловите зелёные монеты корзиной, избегайте красных «сбоев». Управление: мышь / стрелки / касание.</p>
+        <button class="btn-primary" id="startBtn">Начать игру</button>
+      </div>
+
+      <div class="game-msg" id="overMsg" hidden>
+        <h2>ИГРА ОКОНЧЕНА</h2>
+        <p>Результат раунда: <b id="finalScore" style="color:var(--amber)">0</b></p>
+        <button class="btn-primary" id="retryBtn">Играть снова</button>
+      </div>
+    </div>
+
+    <p class="controls-hint">← → или мышь/палец — двигать корзину</p>
+  </section>
+
+  <aside class="sidebar">
+    <div class="panel">
+      <h3>КОШЕЛЁК</h3>
+      <div class="wallet-row">
+        <div class="kv"><span><span class="status-dot" id="statusDot"></span>Статус</span><b id="walletStatus">не подключен</b></div>
+        <div class="kv"><span>Адрес</span><b id="walletAddr">—</b></div>
+        <div class="kv"><span>Сеть</span><b id="walletNet">—</b></div>
+        <button class="btn-primary" id="connectBtn">Подключить кошелёк</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>ВАШ РЕЗУЛЬТАТ</h3>
+      <div class="wallet-row">
+        <div class="kv"><span>Личный рекорд (ончейн)</span><b id="bestScoreVal">—</b></div>
+        <div class="kv"><span>Отправлено раундов</span><b id="triesVal">—</b></div>
+        <div class="submit-row">
+          <button class="btn-primary" id="submitBtn" disabled>Отправить результат в блокчейн</button>
+          <p class="tx-note" id="txNote">Сыграйте раунд, затем отправьте счёт — он запишется в контракт на Arc.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>ТОП-10 (ONCHAIN)</h3>
+      <ol class="leaderboard-list" id="leaderboardList">
+        <li class="leaderboard-empty">Подключите кошелёк, чтобы загрузить лидерборд</li>
+      </ol>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  Контракт: <code id="contractAddrFooter">адрес не задан — впишите после деплоя</code> ·
+  Arc Testnet · chainId 5042002 · <a href="https://testnet.arcscan.app" style="color:var(--teal)" target="_blank" rel="noopener">testnet.arcscan.app</a>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // =====================================================================
+  // 1. КОНФИГУРАЦИЯ — впишите адрес контракта после деплоя (scripts/deploy.js)
+  // =====================================================================
+  const CONTRACT_ADDRESS = ""; // <-- например "0xAbC123...", оставьте пустым до деплоя
+  const CONTRACT_ABI = [{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"score","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"rank","type":"uint256"}],"name":"LeaderboardUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"oldBest","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newBest","type":"uint256"}],"name":"NewPersonalBest","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"score","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"ScoreSubmitted","type":"event"},{"inputs":[],"name":"LEADERBOARD_SIZE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"bestScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getLeaderboard","outputs":[{"components":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"score","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct ClickerGame.Entry[10]","name":"","type":"tuple[10]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"getPlayerStats","outputs":[{"internalType":"uint256","name":"best","type":"uint256"},{"internalType":"uint256","name":"tries","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"leaderboard","outputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"score","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"leaderboardLength","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"submissions","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"score","type":"uint256"}],"name":"submitScore","outputs":[],"stateMutability":"nonpayable","type":"function"}];
+
+  const ARC_TESTNET = {
+    chainIdHex: "0x4cef52",     // 5042002
+    chainName: "Arc Testnet",
+    nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
+    rpcUrls: ["https://rpc.testnet.arc.network"],
+    blockExplorerUrls: ["https://testnet.arcscan.app"],
+  };
+
+  document.getElementById("contractAddrFooter").textContent =
+    CONTRACT_ADDRESS || "адрес не задан — впишите после деплоя";
+
+  // =====================================================================
+  // 2. ИГРА (canvas, без ончейн-зависимостей — работает даже без кошелька)
+  // =====================================================================
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const scoreEl = document.getElementById("scoreVal");
+  const livesEl = document.getElementById("livesVal");
+  const startMsg = document.getElementById("startMsg");
+  const overMsg = document.getElementById("overMsg");
+  const finalScoreEl = document.getElementById("finalScore");
+
+  const W = canvas.width, H = canvas.height;
+  const BASKET_W = 70, BASKET_H = 16;
+
+  let basketX = W / 2 - BASKET_W / 2;
+  let drops = [];
+  let score = 0;
+  let lives = 3;
+  let running = false;
+  let spawnTimer = 0;
+  let speedFactor = 1;
+  let rafId = null;
+  let lastScoreSubmittedFor = 0; // хранит последний завершённый раунд для submit
+
+  function resetGame(){
+    score = 0; lives = 3; drops = []; speedFactor = 1; spawnTimer = 0;
+    basketX = W/2 - BASKET_W/2;
+    scoreEl.textContent = "0";
+    livesEl.textContent = "●●●";
+  }
+
+  function spawnDrop(){
+    const roll = Math.random();
+    let type = "coin";
+    if (roll > 0.92) type = "bonus";
+    else if (roll > 0.80) type = "bomb";
+    drops.push({
+      x: 20 + Math.random() * (W - 40),
+      y: -20,
+      r: type === "bonus" ? 16 : 14,
+      vy: (1.6 + Math.random() * 1.4) * speedFactor,
+      type,
+    });
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, W, H);
+
+    // basket
+    ctx.fillStyle = "#17E3B0";
+    ctx.shadowColor = "rgba(23,227,176,0.6)";
+    ctx.shadowBlur = 12;
+    roundRect(ctx, basketX, H - 40, BASKET_W, BASKET_H, 6);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    drops.forEach(d => {
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+      if (d.type === "coin") ctx.fillStyle = "#FFB454";
+      else if (d.type === "bonus") ctx.fillStyle = "#17E3B0";
+      else ctx.fillStyle = "#FF5D5D";
+      ctx.fill();
+      ctx.fillStyle = "#0A0E12";
+      ctx.font = "bold 12px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(d.type === "bomb" ? "!" : "$", d.x, d.y + 1);
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function update(){
+    spawnTimer++;
+    const interval = Math.max(22, 46 - Math.floor(score / 5));
+    if (spawnTimer > interval){
+      spawnTimer = 0;
+      spawnDrop();
+    }
+
+    drops.forEach(d => d.y += d.vy);
+
+    drops = drops.filter(d => {
+      const caught = d.y + d.r >= H - 40 && d.y <= H - 24 &&
+        d.x > basketX - d.r && d.x < basketX + BASKET_W + d.r;
+      if (caught){
+        if (d.type === "bomb"){
+          lives -= 1;
+          livesEl.textContent = "●".repeat(Math.max(lives,0)) + "○".repeat(3 - Math.max(lives,0));
+          if (lives <= 0) endGame();
+        } else {
+          score += d.type === "bonus" ? 5 : 1;
+          scoreEl.textContent = String(score);
+          speedFactor = 1 + score / 60;
+        }
+        return false;
+      }
+      if (d.y - d.r > H){
+        if (d.type === "coin"){
+          lives -= 1;
+          livesEl.textContent = "●".repeat(Math.max(lives,0)) + "○".repeat(3 - Math.max(lives,0));
+          if (lives <= 0) endGame();
+        }
+        return false;
+      }
+      return true;
+    });
+  }
+
+  function loop(){
+    if (!running) return;
+    update();
+    draw();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function startGame(){
+    resetGame();
+    startMsg.hidden = true;
+    overMsg.hidden = true;
+    running = true;
+    loop();
+  }
+
+  function endGame(){
+    running = false;
+    cancelAnimationFrame(rafId);
+    finalScoreEl.textContent = String(score);
+    overMsg.hidden = false;
+    lastScoreSubmittedFor = score;
+    updateSubmitAvailability();
+  }
+
+  document.getElementById("startBtn").addEventListener("click", startGame);
+  document.getElementById("retryBtn").addEventListener("click", startGame);
+
+  // controls
+  function moveBasketTo(clientX){
+    const rect = canvas.getBoundingClientRect();
+    const scale = W / rect.width;
+    const x = (clientX - rect.left) * scale;
+    basketX = Math.min(W - BASKET_W, Math.max(0, x - BASKET_W / 2));
+  }
+  canvas.addEventListener("mousemove", e => moveBasketTo(e.clientX));
+  canvas.addEventListener("touchmove", e => {
+    moveBasketTo(e.touches[0].clientX);
+    e.preventDefault();
+  }, { passive: false });
+
+  const keys = {};
+  window.addEventListener("keydown", e => { keys[e.key] = true; });
+  window.addEventListener("keyup", e => { keys[e.key] = false; });
+  setInterval(() => {
+    if (!running) return;
+    if (keys["ArrowLeft"]) basketX = Math.max(0, basketX - 9);
+    if (keys["ArrowRight"]) basketX = Math.min(W - BASKET_W, basketX + 9);
+  }, 16);
+
+  draw();
+
+  // =====================================================================
+  // 3. WEB3 / ARC — подключение кошелька, чтение и запись в контракт
+  // =====================================================================
+  let provider = null, signer = null, contract = null, userAddress = null;
+
+  const connectBtn = document.getElementById("connectBtn");
+  const statusDot = document.getElementById("statusDot");
+  const walletStatus = document.getElementById("walletStatus");
+  const walletAddr = document.getElementById("walletAddr");
+  const walletNet = document.getElementById("walletNet");
+  const bestScoreVal = document.getElementById("bestScoreVal");
+  const triesVal = document.getElementById("triesVal");
+  const submitBtn = document.getElementById("submitBtn");
+  const txNote = document.getElementById("txNote");
+  const leaderboardList = document.getElementById("leaderboardList");
+
+  function shortAddr(a){ return a.slice(0,6) + "…" + a.slice(-4); }
+
+  async function connectWallet(){
+    if (!window.ethereum){
+      txNote.textContent = "Кошелёк не найден. Установите MetaMask или другой EVM-кошелёк.";
+      return;
+    }
+    try{
+      provider = new ethers.BrowserProvider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = await provider.getSigner();
+      userAddress = await signer.getAddress();
+
+      await ensureArcNetwork();
+
+      const network = await provider.getNetwork();
+      walletStatus.textContent = "подключен";
+      statusDot.classList.add("on");
+      walletAddr.textContent = shortAddr(userAddress);
+      walletNet.textContent = network.chainId.toString() === "5042002" ? "Arc Testnet" : `chainId ${network.chainId}`;
+      connectBtn.textContent = "Кошелёк подключен";
+      connectBtn.disabled = true;
+
+      if (CONTRACT_ADDRESS){
+        contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        await refreshOnchainState();
+      } else {
+        txNote.textContent = "CONTRACT_ADDRESS не задан во frontend/index.html — задеплойте контракт и впишите адрес.";
+      }
+      updateSubmitAvailability();
+    } catch(err){
+      console.error(err);
+      txNote.textContent = "Не удалось подключиться: " + (err && err.message ? err.message : err);
+    }
+  }
+
+  async function ensureArcNetwork(){
+    try{
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: ARC_TESTNET.chainIdHex }],
+      });
+    } catch(switchErr){
+      // 4902 = сеть ещё не добавлена в кошелёк
+      if (switchErr.code === 4902){
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: ARC_TESTNET.chainIdHex,
+            chainName: ARC_TESTNET.chainName,
+            nativeCurrency: ARC_TESTNET.nativeCurrency,
+            rpcUrls: ARC_TESTNET.rpcUrls,
+            blockExplorerUrls: ARC_TESTNET.blockExplorerUrls,
+          }],
+        });
+      } else {
+        throw switchErr;
+      }
+    }
+  }
+
+  async function refreshOnchainState(){
+    if (!contract || !userAddress) return;
+    try{
+      const [best, tries] = await contract.getPlayerStats(userAddress);
+      bestScoreVal.textContent = best.toString();
+      triesVal.textContent = tries.toString();
+
+      const board = await contract.getLeaderboard();
+      renderLeaderboard(board);
+    } catch(err){
+      console.error(err);
+    }
+  }
+
+  function renderLeaderboard(board){
+    const entries = board
+      .filter(e => e.player !== ethers.ZeroAddress)
+      .sort((a,b) => Number(b.score) - Number(a.score));
+
+    if (entries.length === 0){
+      leaderboardList.innerHTML = `<li class="leaderboard-empty">Пока нет результатов — станьте первым!</li>`;
+      return;
+    }
+
+    leaderboardList.innerHTML = entries.map((e, i) => `
+      <li>
+        <span><span class="rank">#${i+1}</span>${shortAddr(e.player)}</span>
+        <b>${e.score.toString()}</b>
+      </li>
+    `).join("");
+  }
+
+  function updateSubmitAvailability(){
+    const hasFinishedRound = !running && lastScoreSubmittedFor > 0;
+    submitBtn.disabled = !(contract && userAddress && hasFinishedRound);
+  }
+
+  async function submitScoreOnchain(){
+    if (!contract){
+      txNote.textContent = "Сначала подключите кошелёк и задеплойте контракт.";
+      return;
+    }
+    submitBtn.disabled = true;
+    txNote.textContent = "Отправка транзакции в сеть Arc…";
+    try{
+      const tx = await contract.submitScore(lastScoreSubmittedFor);
+      txNote.innerHTML = `Ждём подтверждения… <a href="https://testnet.arcscan.app/tx/${tx.hash}" target="_blank" rel="noopener">tx</a>`;
+      await tx.wait();
+      txNote.textContent = "Результат записан в блокчейн ✅";
+      lastScoreSubmittedFor = 0;
+      await refreshOnchainState();
+    } catch(err){
+      console.error(err);
+      txNote.textContent = "Транзакция не прошла: " + (err && err.shortMessage ? err.shortMessage : err.message);
+    } finally {
+      updateSubmitAvailability();
+    }
+  }
+
+  connectBtn.addEventListener("click", connectWallet);
+  submitBtn.addEventListener("click", submitScoreOnchain);
+
+  if (window.ethereum){
+    window.ethereum.on && window.ethereum.on("accountsChanged", () => window.location.reload());
+    window.ethereum.on && window.ethereum.on("chainChanged", () => window.location.reload());
+  }
+})();
+</script>
+</body>
+</html>
