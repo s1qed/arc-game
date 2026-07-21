@@ -350,10 +350,95 @@
   }
 
   const ENEMY_TYPES = {
-    blob:  { r: 20, hp: 3, speed: 0.55, points: 10, color: "#FFB454", dark: "#3A2200" },
-    spike: { r: 14, hp: 1, speed: 1.5,  points: 15, color: "#FF5D5D", dark: "#2B0A0A" },
-    ghost: { r: 17, hp: 2, speed: 0.9,  points: 20, color: "#9AA5E8", dark: "#141936" },
+    blob:  { r: 20, hp: 3, speed: 0.55, points: 10, color: "#FFB454", dark: "#3A2200", sprite: "mine" },
+    spike: { r: 14, hp: 1, speed: 1.5,  points: 15, color: "#9AA5B0", dark: "#2B0A0A", sprite: "drone" },
+    ghost: { r: 17, hp: 2, speed: 0.9,  points: 20, color: "#9AA5E8", dark: "#141936", sprite: "ghost" },
   };
+
+  const SPRITES = {
+    guardian: {
+      rows: [
+        ".....A.....",
+        ".....A.....",
+        "....TTT....",
+        "....TTT....",
+        "...TTTTT...",
+        "..TTTTTTT..",
+        ".TTTLLLTTT.",
+        "TTTTLLLTTTT",
+        "TTTTTTTTTTT",
+        "KKKKKKKKKKK",
+        "K.KK.K.KK.K",
+        "K.KK.K.KK.K",
+        "K.KK.K.KK.K",
+      ],
+      palette: { A: "#FFB454", T: "#17E3B0", L: "#BFF7E6", K: "#0B2C24" },
+    },
+    drone: {
+      rows: [
+        "..K.....K..",
+        "..K.....K..",
+        ".KKK...KKK.",
+        "..K.....K..",
+        "...GGGGG...",
+        "..G.E.E.G..",
+        "..G.GGG.G..",
+        "...G...G...",
+        "....GGG....",
+      ],
+      palette: { K: "#4A5560", G: "#9AA5B0", E: "#FFB454" },
+    },
+    mine: {
+      rows: [
+        ".....S.....",
+        "..S..O..S..",
+        "...OOOOO...",
+        "..OOOOOOO..",
+        "S.OOHHHOO.S",
+        "..OOHHHOO..",
+        "S.OOHHHOO.S",
+        "..OOOOOOO..",
+        "...OOOOO...",
+        "..S..O..S..",
+        ".....S.....",
+      ],
+      palette: { S: "#7A3A00", O: "#FFB454", H: "#FFD9A0" },
+    },
+    ghost: {
+      rows: [
+        "..GGGGG..",
+        ".GGGGGGG.",
+        "GG.E.E.GG",
+        "GGGGGGGGG",
+        "GGGGGGGGG",
+        "GG.GGG.GG",
+        "G.G.G.G.G",
+        ".G.G.G.G.",
+      ],
+      palette: { G: "#9AA5E8", E: "#1C2140" },
+    },
+  };
+
+  function drawSprite(sprite, cx, cy, cellSize, opacity){
+    const rows = sprite.rows;
+    const h = rows.length;
+    const w = rows[0].length;
+    const totalW = w * cellSize, totalH = h * cellSize;
+    const startX = cx - totalW / 2;
+    const startY = cy - totalH / 2;
+    ctx.save();
+    ctx.globalAlpha = opacity === undefined ? 1 : opacity;
+    for (let r = 0; r < h; r++){
+      const row = rows[r];
+      for (let c = 0; c < w; c++){
+        const ch = row[c];
+        if (ch === ".") continue;
+        ctx.fillStyle = sprite.palette[ch];
+        ctx.fillRect(startX + c * cellSize, startY + r * cellSize, cellSize, cellSize);
+      }
+    }
+    ctx.restore();
+  }
 
   function spawnEnemy(){
     const roll = Math.random();
@@ -385,33 +470,12 @@
     }
   }
 
+  const GUARDIAN_CELL = 4;
   function drawGuardian(){
     ctx.save();
-    ctx.translate(guardianX, GUARDIAN_Y);
-    ctx.fillStyle = "#17E3B0";
-    ctx.shadowColor = "rgba(23,227,176,0.55)";
-    ctx.shadowBlur = 10;
-    roundRect(ctx, -GUARDIAN_W/2, -6, GUARDIAN_W, 18, 6);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(0, -26, 14, 0, Math.PI * 2);
-    ctx.fillStyle = "#121821";
-    ctx.fill();
-    ctx.strokeStyle = "#17E3B0";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = "#17E3B0";
-    ctx.beginPath(); ctx.arc(-5, -28, 2.6, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(5, -28, 2.6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#121821";
-    ctx.fillRect(-3, -40, 6, 14);
-    ctx.strokeStyle = "#17E3B0";
-    ctx.strokeRect(-3, -40, 6, 14);
-    ctx.beginPath();
-    ctx.arc(0, -42, 4, 0, Math.PI * 2);
-    ctx.fillStyle = "#FFB454";
-    ctx.fill();
+    ctx.shadowColor = "rgba(23,227,176,0.45)";
+    ctx.shadowBlur = 8;
+    drawSprite(SPRITES.guardian, guardianX, GUARDIAN_Y - 6, GUARDIAN_CELL, 1);
     ctx.restore();
   }
 
@@ -430,29 +494,22 @@
 
   function drawEnemy(e){
     const def = ENEMY_TYPES[e.type];
-    ctx.save();
-    ctx.translate(e.x, e.y);
-    if (e.type === "ghost") ctx.globalAlpha = 0.75;
-    ctx.beginPath();
-    ctx.arc(0, 0, e.r, 0, Math.PI * 2);
-    ctx.fillStyle = def.color;
-    ctx.fill();
-    ctx.fillStyle = def.dark;
-    if (e.type === "spike"){
-      ctx.fillRect(-6, -2, 12, 3);
-    } else {
-      ctx.beginPath(); ctx.arc(-e.r*0.32, -e.r*0.15, 2.4, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(e.r*0.32, -e.r*0.15, 2.4, 0, Math.PI*2); ctx.fill();
-    }
+    const sprite = SPRITES[def.sprite];
+    const cols = sprite.rows[0].length;
+    const cellSize = (e.r * 2.3) / cols;
+    const opacity = e.type === "ghost" ? 0.85 : 1;
+
+    drawSprite(sprite, e.x, e.y, cellSize, opacity);
+
     if (e.maxHp > 1){
-      ctx.globalAlpha = 1;
+      ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.35)";
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(0, 0, e.r + 4, -Math.PI/2, -Math.PI/2 + (e.hp/e.maxHp) * Math.PI * 2);
+      ctx.arc(e.x, e.y, e.r + 4, -Math.PI/2, -Math.PI/2 + (e.hp/e.maxHp) * Math.PI * 2);
       ctx.stroke();
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   function roundRect(ctx, x, y, w, h, r){
@@ -470,11 +527,13 @@
     drawVault();
     drawGuardian();
 
-    ctx.fillStyle = "#FFB454";
     bullets.forEach(b => {
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = "#BFF7E6";
+      ctx.fillRect(b.x - 2, b.y - 6, 4, 10);
+      ctx.fillStyle = "#17E3B0";
+      ctx.fillRect(b.x - 2, b.y + 2, 4, 3);
+      ctx.fillStyle = "#FFB454";
+      ctx.fillRect(b.x - 1, b.y - 9, 2, 3);
     });
 
     enemies.forEach(drawEnemy);
