@@ -769,7 +769,7 @@
     }
 
     let pool = 0n;
-try{
+ try{
       const board = await contract.getLeaderboard();
       renderLeaderboard(board);
       updateClaimAvailability(board, pool);
