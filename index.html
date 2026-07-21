@@ -769,22 +769,27 @@
     }
 
     let pool = 0n;
-    try{
-      pool = await contract.prizePool();
-      prizePoolVal.textContent = fmtUsdc(pool);
-    } catch(err){
-      console.error("prizePool failed:", err);
-    }
-
-    try{
+try{
       const board = await contract.getLeaderboard();
       renderLeaderboard(board);
       updateClaimAvailability(board, pool);
     } catch(err){
-      console.error("getLeaderboard failed:", err);
-      leaderboardList.innerHTML = `<li class="leaderboard-empty">Couldn't load the leaderboard (network hiccup) — try again in a moment.</li>`;
+      console.error("getLeaderboard failed, trying fallback:", err);
+      try{
+        const len = await contract.leaderboardLength();
+        const calls = [];
+        for (let i = 0; i < Number(len); i++){
+          calls.push(contract.leaderboard(i));
+        }
+        const rows = await Promise.all(calls);
+        const board = rows.map(r => ({ player: r.player, score: r.score, timestamp: r.timestamp }));
+        renderLeaderboard(board);
+        updateClaimAvailability(board, pool);
+      } catch(fallbackErr){
+        console.error("leaderboard fallback also failed:", fallbackErr);
+        leaderboardList.innerHTML = `<li class="leaderboard-empty">Couldn't load the leaderboard (network hiccup) — try again in a moment.</li>`;
+      }
     }
-  }
 
   function renderLeaderboard(board){
     const entries = board
