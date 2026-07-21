@@ -1,300 +1,832 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VAULT DEFENDER — on-chain arcade on Arc</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#0A0E12;
+    --panel:#121821;
+    --panel-border:#1E2731;
+    --teal:#17E3B0;
+    --amber:#FFB454;
+    --danger:#FF5D5D;
+    --text:#E8EEF3;
+    --muted:#6E7A87;
+    --arcade: 'Press Start 2P', monospace;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg-deep);color:var(--text);font-family:var(--mono);}
+  body{
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(23,227,176,0.07), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(255,180,84,0.05), transparent 40%);
+  }
 
-/// @title VaultDefender — an on-chain arcade shooter for the Arc network
-/// @notice Players stake the native token (USDC on Arc) to enter a ranked
-///         round, defend the Vault against waves of enemies in the
-///         frontend, then submit their score. The current #1 defender can
-///         claim the accumulated prize pool and receives a Trophy NFT.
-contract VaultDefender {
-    // ---------------------------------------------------------------
-    // Config
-    // ---------------------------------------------------------------
+  .ticker{
+    border-bottom:1px solid var(--panel-border);
+    background:#0D1319;
+    overflow:hidden;
+    white-space:nowrap;
+    padding:8px 0;
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:0.5px;
+  }
+  .ticker__track{
+    display:inline-block;
+    padding-left:100%;
+    animation:scroll 20s linear infinite;
+  }
+  .ticker__track span{margin-right:48px;}
+  .ticker__track .dot{color:var(--teal);}
+  @keyframes scroll{
+    0%{transform:translateX(0);}
+    100%{transform:translateX(-100%);}
+  }
 
-    /// @notice Cost to enter one ranked round, in the chain's native token
-    ///         (USDC has 6 decimals on Arc, so 100_000 == 0.10 USDC)
-    uint256 public constant ENTRY_FEE = 100_000;
+  header{
+    padding:28px clamp(16px,4vw,48px) 8px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  h1{
+    font-family:var(--arcade);
+    font-size:clamp(16px,2.4vw,22px);
+    margin:0;
+    color:var(--teal);
+    text-shadow:0 0 18px rgba(23,227,176,0.35);
+  }
+  h1 small{display:block;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px;letter-spacing:1px;text-transform:uppercase;}
 
-    uint256 public constant LEADERBOARD_SIZE = 10;
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns:minmax(280px,440px) 320px;
+    gap:24px;
+    padding:8px clamp(16px,4vw,48px) 40px;
+    justify-content:center;
+  }
+  @media (max-width:860px){
+    main{grid-template-columns:1fr;}
+  }
 
-    // ---------------------------------------------------------------
-    // Game state
-    // ---------------------------------------------------------------
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    padding:16px;
+  }
 
-    struct Entry {
-        address player;
-        uint256 score;
-        uint256 timestamp;
+  .game-panel{position:relative;display:flex;flex-direction:column;gap:12px;}
+  .hud{display:flex;justify-content:space-between;align-items:center;font-family:var(--arcade);font-size:10.5px;flex-wrap:wrap;gap:8px;}
+  .hud .score{color:var(--amber);}
+  .hud .combo{color:var(--teal);}
+  .vault-hp{display:flex;align-items:center;gap:6px;}
+  .vault-hp-bar{width:70px;height:8px;background:#1E2731;border-radius:4px;overflow:hidden;}
+  .vault-hp-fill{height:100%;background:var(--teal);transition:width .2s ease, background .2s ease;}
+
+  #gameCanvas{
+    width:100%;
+    aspect-ratio: 4 / 5;
+    background:
+      linear-gradient(180deg, rgba(23,227,176,0.04), transparent 40%),
+      #0B1016;
+    border-radius:8px;
+    border:1px solid var(--panel-border);
+    touch-action:none;
+    cursor:pointer;
+    display:block;
+  }
+  .game-msg{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    text-align:center;
+    background:rgba(10,14,18,0.86);
+    border-radius:8px;
+    padding:20px;
+  }
+  .game-msg[hidden]{display:none;}
+  .game-msg h2{font-family:var(--arcade);font-size:14px;color:var(--teal);margin:0;}
+  .game-msg p{color:var(--muted);font-size:11.5px;max-width:300px;line-height:1.6;margin:0;}
+  .msg-btn-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+
+  button{
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:12px;
+    letter-spacing:0.4px;
+    padding:11px 16px;
+    border-radius:6px;
+    border:1px solid transparent;
+    cursor:pointer;
+    transition:transform .08s ease, filter .15s ease;
+  }
+  button:active{transform:translateY(1px);}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-primary{background:var(--teal);color:#04140F;}
+  .btn-primary:hover:not(:disabled){filter:brightness(1.08);}
+  .btn-amber{background:var(--amber);color:#3A2200;}
+  .btn-amber:hover:not(:disabled){filter:brightness(1.08);}
+  .btn-ghost{background:transparent;color:var(--text);border-color:var(--panel-border);}
+  .btn-ghost:hover:not(:disabled){border-color:var(--teal);color:var(--teal);}
+
+  .controls-hint{font-size:10.5px;color:var(--muted);text-align:center;}
+
+  .sidebar{display:flex;flex-direction:column;gap:16px;}
+  .panel h3{
+    font-family:var(--arcade);
+    font-size:10px;
+    margin:0 0 12px;
+    color:var(--text);
+    letter-spacing:0.5px;
+  }
+  .wallet-row{display:flex;flex-direction:column;gap:10px;font-size:12px;}
+  .kv{display:flex;justify-content:space-between;gap:8px;color:var(--muted);}
+  .kv b{color:var(--text);font-weight:500;}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--danger);display:inline-block;margin-right:6px;}
+  .status-dot.on{background:var(--teal);box-shadow:0 0 8px rgba(23,227,176,0.7);}
+
+  .leaderboard-list{list-style:none;margin:0;padding:0;font-size:12px;}
+  .leaderboard-list li{
+    display:flex;
+    justify-content:space-between;
+    padding:7px 0;
+    border-bottom:1px dashed var(--panel-border);
+    color:var(--muted);
+  }
+  .leaderboard-list li:last-child{border-bottom:none;}
+  .leaderboard-list li b{color:var(--text);}
+  .leaderboard-list li.you{color:var(--teal);}
+  .leaderboard-list .rank{color:var(--amber);width:22px;display:inline-block;}
+  .leaderboard-empty{color:var(--muted);font-size:11.5px;}
+
+  .prize-amount{font-family:var(--arcade);font-size:16px;color:var(--amber);margin:4px 0 10px;}
+
+  .submit-row{display:flex;flex-direction:column;gap:10px;margin-top:4px;}
+  .tx-note{font-size:10.5px;color:var(--muted);line-height:1.5;}
+  .tx-note a{color:var(--teal);}
+
+  footer{
+    padding:16px clamp(16px,4vw,48px) 28px;
+    color:var(--muted);
+    font-size:10.5px;
+    text-align:center;
+    border-top:1px solid var(--panel-border);
+  }
+  footer code{color:var(--teal);}
+</style>
+</head>
+<body>
+
+<div class="ticker">
+  <div class="ticker__track" id="tickerTrack">
+    <span><span class="dot">●</span> VAULT DEFENDER — stake USDC, defend the vault, claim the pool</span>
+    <span><span class="dot">●</span> connect your wallet to sync with the Arc network</span>
+    <span><span class="dot">●</span> Arc Testnet · chainId 5042002 · gas paid in USDC</span>
+    <span><span class="dot">●</span> the #1 defender can claim the whole prize pool + a Trophy NFT</span>
+  </div>
+</div>
+
+<header>
+  <h1>VAULT DEFENDER<small>on-chain shooter · Solidity + Arc (Circle L1)</small></h1>
+</header>
+
+<main>
+  <section class="panel game-panel">
+    <div class="hud">
+      <div class="score">SCORE <span id="scoreVal">0</span></div>
+      <div class="combo">COMBO x<span id="comboVal">1</span></div>
+      <div class="vault-hp">VAULT
+        <div class="vault-hp-bar"><div class="vault-hp-fill" id="vaultHpFill" style="width:100%"></div></div>
+      </div>
+    </div>
+
+    <div style="position:relative;">
+      <canvas id="gameCanvas" width="440" height="550"></canvas>
+
+      <div class="game-msg" id="startMsg">
+        <h2>VAULT DEFENDER</h2>
+        <p>Enemies fall from above — Inflation Blobs, Volatility Spikes and FUD Ghosts — trying to breach the Vault. Move with mouse / touch / arrow keys, fire with click or spacebar.</p>
+        <div class="msg-btn-row">
+          <button class="btn-ghost" id="practiceBtn">Practice (free)</button>
+          <button class="btn-primary" id="compeleBtn">Enter Ranked Round</button>
+        </div>
+      </div>
+
+      <div class="game-msg" id="overMsg" hidden>
+        <h2>VAULT BREACHED</h2>
+        <p>Round score: <b id="finalScore" style="color:var(--amber)">0</b></p>
+        <div class="msg-btn-row">
+          <button class="btn-ghost" id="retryPracticeBtn">Practice again</button>
+          <button class="btn-amber" id="retryRankedBtn">Enter new round</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="controls-hint">← → or mouse/touch to move · click or SPACE to fire</p>
+  </section>
+
+  <aside class="sidebar">
+    <div class="panel">
+      <h3>WALLET</h3>
+      <div class="wallet-row">
+        <div class="kv"><span><span class="status-dot" id="statusDot"></span>Status</span><b id="walletStatus">not connected</b></div>
+        <div class="kv"><span>Address</span><b id="walletAddr">—</b></div>
+        <div class="kv"><span>Network</span><b id="walletNet">—</b></div>
+        <button class="btn-primary" id="connectBtn">Connect wallet</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>YOUR STATS</h3>
+      <div class="wallet-row">
+        <div class="kv"><span>Best score (on-chain)</span><b id="bestScoreVal">—</b></div>
+        <div class="kv"><span>Ranked rounds played</span><b id="roundsVal">—</b></div>
+        <div class="kv"><span>Trophies won</span><b id="trophiesVal">—</b></div>
+        <div class="submit-row">
+          <button class="btn-primary" id="submitBtn" disabled>Submit score on-chain</button>
+          <p class="tx-note" id="txNote">Play a ranked round, then submit — your score gets written to the VaultDefender contract on Arc.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>PRIZE POOL</h3>
+      <div class="prize-amount" id="prizePoolVal">0.00 USDC</div>
+      <p class="tx-note" id="prizeNote">Only the current #1 defender can claim the pool — claiming also mints a Trophy NFT.</p>
+      <button class="btn-amber" id="claimBtn" disabled style="margin-top:10px;">Claim prize pool</button>
+    </div>
+
+    <div class="panel">
+      <h3>TOP 10 (ON-CHAIN)</h3>
+      <ol class="leaderboard-list" id="leaderboardList">
+        <li class="leaderboard-empty">Connect your wallet to load the leaderboard</li>
+      </ol>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  Contract: <code id="contractAddrFooter">address not set — fill in after deployment</code> ·
+  Arc Testnet · chainId 5042002 · <a href="https://testnet.arcscan.app" style="color:var(--teal)" target="_blank" rel="noopener">testnet.arcscan.app</a>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const CONTRACT_ADDRESS = "0x17Ba08f3a76f9eB6a602eFBb3407276822EB6392";
+  const CONTRACT_ABI = [{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"approved","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"operator","type":"address"},{"indexed":false,"internalType":"bool","name":"approved","type":"bool"}],"name":"ApprovalForAll","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"score","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"rank","type":"uint256"}],"name":"LeaderboardUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"oldBest","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newBest","type":"uint256"}],"name":"NewPersonalBest","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"PrizeClaimed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"fee","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newPoolTotal","type":"uint256"}],"name":"RoundEntered","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"score","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"ScoreSubmitted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"LEADERBOARD_SIZE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"approve","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"bestScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"claimPrize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"enterRound","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getApproved","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getLeaderboard","outputs":[{"components":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"score","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct VaultDefender.Entry[10]","name":"","type":"tuple[10]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"getPlayerStats","outputs":[{"internalType":"uint256","name":"best","type":"uint256"},{"internalType":"uint256","name":"rounds","type":"uint256"},{"internalType":"uint256","name":"trophies","type":"uint256"},{"internalType":"bool","name":"activeRound","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"hasActiveRound","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"operator","type":"address"}],"name":"isApprovedForAll","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"leaderboard","outputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"score","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"leaderboardLength","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"nextTokenId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"owner","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"prizePool","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"roundsPlayed","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"operator","type":"address"},{"internalType":"bool","name":"approved","type":"bool"}],"name":"setApprovalForAll","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"score","type":"uint256"}],"name":"submitScore","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"interfaceId","type":"bytes4"}],"name":"supportsInterface","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"pure","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"tokenURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"trophyCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"trophyScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
+
+  const ENTRY_FEE_RAW = 100000n;
+  const ENTRY_FEE_LABEL = "0.10 USDC";
+
+  const ARC_TESTNET = {
+    chainIdHex: "0x4cef52",
+    chainName: "Arc Testnet",
+    nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
+    rpcUrls: ["https://rpc.testnet.arc.network"],
+    blockExplorerUrls: ["https://testnet.arcscan.app"],
+  };
+
+  document.getElementById("contractAddrFooter").textContent =
+    CONTRACT_ADDRESS || "address not set — fill in after deployment";
+
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const scoreEl = document.getElementById("scoreVal");
+  const comboEl = document.getElementById("comboVal");
+  const vaultHpFill = document.getElementById("vaultHpFill");
+  const startMsg = document.getElementById("startMsg");
+  const overMsg = document.getElementById("overMsg");
+  const finalScoreEl = document.getElementById("finalScore");
+
+  const W = canvas.width, H = canvas.height;
+  const GUARDIAN_W = 46, GUARDIAN_Y = H - 78;
+  const VAULT_MAX_HP = 100;
+
+  let guardianX = W / 2;
+  let enemies = [];
+  let bullets = [];
+  let particles = [];
+  let score = 0;
+  let combo = 1;
+  let vaultHp = VAULT_MAX_HP;
+  let running = false;
+  let isRankedRun = false;
+  let spawnTimer = 0;
+  let fireTimer = 0;
+  let difficulty = 1;
+  let rafId = null;
+  let lastFinishedScore = 0;
+  let lastFinishedWasRanked = false;
+
+  function resetGame(){
+    score = 0; combo = 1; vaultHp = VAULT_MAX_HP; difficulty = 1;
+    enemies = []; bullets = []; particles = [];
+    spawnTimer = 0; fireTimer = 0;
+    guardianX = W / 2;
+    scoreEl.textContent = "0";
+    comboEl.textContent = "1";
+    vaultHpFill.style.width = "100%";
+    vaultHpFill.style.background = "var(--teal)";
+  }
+
+  const ENEMY_TYPES = {
+    blob:  { r: 20, hp: 3, speed: 0.55, points: 10, color: "#FFB454", dark: "#3A2200" },
+    spike: { r: 14, hp: 1, speed: 1.5,  points: 15, color: "#FF5D5D", dark: "#2B0A0A" },
+    ghost: { r: 17, hp: 2, speed: 0.9,  points: 20, color: "#9AA5E8", dark: "#141936" },
+  };
+
+  function spawnEnemy(){
+    const roll = Math.random();
+    let type = "blob";
+    if (roll > 0.85) type = "ghost";
+    else if (roll > 0.55) type = "spike";
+    const def = ENEMY_TYPES[type];
+    enemies.push({
+      type, x: 30 + Math.random() * (W - 60), y: -30,
+      r: def.r, hp: def.hp, maxHp: def.hp,
+      speed: def.speed * difficulty,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: 0.05 + Math.random() * 0.05,
+    });
+  }
+
+  function fireBullet(){
+    bullets.push({ x: guardianX, y: GUARDIAN_Y - 26, vy: -8 });
+  }
+
+  function spawnParticles(x, y, color){
+    for (let i = 0; i < 8; i++){
+      particles.push({
+        x, y, color,
+        vx: (Math.random() - 0.5) * 4,
+        vy: (Math.random() - 0.5) * 4,
+        life: 18,
+      });
+    }
+  }
+
+  function drawGuardian(){
+    ctx.save();
+    ctx.translate(guardianX, GUARDIAN_Y);
+    ctx.fillStyle = "#17E3B0";
+    ctx.shadowColor = "rgba(23,227,176,0.55)";
+    ctx.shadowBlur = 10;
+    roundRect(ctx, -GUARDIAN_W/2, -6, GUARDIAN_W, 18, 6);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(0, -26, 14, 0, Math.PI * 2);
+    ctx.fillStyle = "#121821";
+    ctx.fill();
+    ctx.strokeStyle = "#17E3B0";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#17E3B0";
+    ctx.beginPath(); ctx.arc(-5, -28, 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -28, 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#121821";
+    ctx.fillRect(-3, -40, 6, 14);
+    ctx.strokeStyle = "#17E3B0";
+    ctx.strokeRect(-3, -40, 6, 14);
+    ctx.beginPath();
+    ctx.arc(0, -42, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#FFB454";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawVault(){
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = "#121821";
+    roundRect(ctx, 20, H - 26, W - 40, 20, 4);
+    ctx.fill();
+    ctx.strokeStyle = "#17E3B0";
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawEnemy(e){
+    const def = ENEMY_TYPES[e.type];
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    if (e.type === "ghost") ctx.globalAlpha = 0.75;
+    ctx.beginPath();
+    ctx.arc(0, 0, e.r, 0, Math.PI * 2);
+    ctx.fillStyle = def.color;
+    ctx.fill();
+    ctx.fillStyle = def.dark;
+    if (e.type === "spike"){
+      ctx.fillRect(-6, -2, 12, 3);
+    } else {
+      ctx.beginPath(); ctx.arc(-e.r*0.32, -e.r*0.15, 2.4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(e.r*0.32, -e.r*0.15, 2.4, 0, Math.PI*2); ctx.fill();
+    }
+    if (e.maxHp > 1){
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.35)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, e.r + 4, -Math.PI/2, -Math.PI/2 + (e.hp/e.maxHp) * Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function roundRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, W, H);
+    drawVault();
+    drawGuardian();
+
+    ctx.fillStyle = "#FFB454";
+    bullets.forEach(b => {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    enemies.forEach(drawEnemy);
+
+    particles.forEach(p => {
+      ctx.globalAlpha = Math.max(p.life / 18, 0);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function damageVault(amount){
+    vaultHp = Math.max(0, vaultHp - amount);
+    const pct = (vaultHp / VAULT_MAX_HP) * 100;
+    vaultHpFill.style.width = pct + "%";
+    vaultHpFill.style.background = pct < 30 ? "var(--danger)" : (pct < 60 ? "var(--amber)" : "var(--teal)");
+    combo = 1;
+    comboEl.textContent = "1";
+    if (vaultHp <= 0) endGame();
+  }
+
+  function update(){
+    spawnTimer++;
+    const interval = Math.max(28, 62 - Math.floor(score / 8));
+    if (spawnTimer > interval){
+      spawnTimer = 0;
+      spawnEnemy();
+      difficulty = 1 + score / 250;
     }
 
-    mapping(address => uint256) public bestScore;
-    mapping(address => uint256) public roundsPlayed;
-    mapping(address => bool) public hasActiveRound;
-    mapping(address => uint256) public trophyCount;
-
-    Entry[LEADERBOARD_SIZE] public leaderboard;
-    uint256 public leaderboardLength;
-
-    uint256 public prizePool;
-
-    bool private _locked;
-
-    // ---------------------------------------------------------------
-    // Trophy NFT (minimal ERC721, no external imports)
-    // ---------------------------------------------------------------
-
-    string public constant name = "Vault Defender Trophy";
-    string public constant symbol = "VDT";
-
-    uint256 public nextTokenId = 1;
-    mapping(uint256 => address) private _owners;
-    mapping(address => uint256) private _balances;
-    mapping(uint256 => address) private _tokenApprovals;
-    mapping(address => mapping(address => bool)) private _operatorApprovals;
-    mapping(uint256 => uint256) public trophyScore;
-
-    // ---------------------------------------------------------------
-    // Events
-    // ---------------------------------------------------------------
-
-    event RoundEntered(address indexed player, uint256 fee, uint256 newPoolTotal);
-    event ScoreSubmitted(address indexed player, uint256 score, uint256 timestamp);
-    event NewPersonalBest(address indexed player, uint256 oldBest, uint256 newBest);
-    event LeaderboardUpdated(address indexed player, uint256 score, uint256 rank);
-    event PrizeClaimed(address indexed player, uint256 amount, uint256 tokenId);
-
-    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
-    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-
-    modifier nonReentrant() {
-        require(!_locked, "reentrant call");
-        _locked = true;
-        _;
-        _locked = false;
+    fireTimer++;
+    if (keys[" "] && fireTimer > 9){
+      fireTimer = 0;
+      fireBullet();
     }
 
-    // ---------------------------------------------------------------
-    // Game logic
-    // ---------------------------------------------------------------
+    bullets.forEach(b => b.y += b.vy);
+    bullets = bullets.filter(b => b.y > -10);
 
-    /// @notice Pay the entry fee to start a ranked round. Must be followed
-    ///         by exactly one submitScore() call once the round ends.
-    function enterRound() external payable {
-        require(msg.value == ENTRY_FEE, "send exact ENTRY_FEE");
-        require(!hasActiveRound[msg.sender], "round already active");
+    enemies.forEach(e => {
+      e.wobble += e.wobbleSpeed;
+      e.x += Math.sin(e.wobble) * (e.type === "spike" ? 1.6 : 0.4);
+      e.x = Math.min(W - e.r, Math.max(e.r, e.x));
+      e.y += e.speed;
+    });
 
-        hasActiveRound[msg.sender] = true;
-        roundsPlayed[msg.sender] += 1;
-        prizePool += msg.value;
-
-        emit RoundEntered(msg.sender, msg.value, prizePool);
-    }
-
-    /// @notice Submit the score for the currently active ranked round.
-    function submitScore(uint256 score) external {
-        require(hasActiveRound[msg.sender], "no active round - call enterRound first");
-        require(score > 0, "score must be > 0");
-
-        hasActiveRound[msg.sender] = false;
-        emit ScoreSubmitted(msg.sender, score, block.timestamp);
-
-        uint256 currentBest = bestScore[msg.sender];
-        if (score > currentBest) {
-            bestScore[msg.sender] = score;
-            emit NewPersonalBest(msg.sender, currentBest, score);
+    for (let bi = bullets.length - 1; bi >= 0; bi--){
+      const b = bullets[bi];
+      for (let ei = enemies.length - 1; ei >= 0; ei--){
+        const e = enemies[ei];
+        const dx = b.x - e.x, dy = b.y - e.y;
+        if (dx*dx + dy*dy < (e.r + 4) * (e.r + 4)){
+          e.hp -= 1;
+          bullets.splice(bi, 1);
+          if (e.hp <= 0){
+            const def = ENEMY_TYPES[e.type];
+            score += def.points * combo;
+            scoreEl.textContent = String(score);
+            combo = Math.min(combo + 1, 9);
+            comboEl.textContent = String(combo);
+            spawnParticles(e.x, e.y, def.color);
+            enemies.splice(ei, 1);
+          }
+          break;
         }
-
-        _tryInsertLeaderboard(msg.sender, score);
+      }
     }
 
-    /// @notice Only the current #1 defender can claim the whole prize pool.
-    ///         Claiming resets the pool to zero and mints a Trophy NFT.
-    function claimPrize() external nonReentrant {
-        require(leaderboardLength > 0, "leaderboard is empty");
-        require(leaderboard[0].player == msg.sender, "only the top defender can claim");
-        require(prizePool > 0, "prize pool is empty");
-
-        uint256 amount = prizePool;
-        prizePool = 0;
-
-        uint256 tokenId = _mintTrophy(msg.sender, leaderboard[0].score);
-
-        (bool ok, ) = msg.sender.call{value: amount}("");
-        require(ok, "prize transfer failed");
-
-        emit PrizeClaimed(msg.sender, amount, tokenId);
+    for (let ei = enemies.length - 1; ei >= 0; ei--){
+      const e = enemies[ei];
+      if (e.y - e.r > H - 26){
+        enemies.splice(ei, 1);
+        damageVault(e.type === "spike" ? 8 : e.type === "ghost" ? 12 : 16);
+      }
     }
 
-    function getLeaderboard() external view returns (Entry[LEADERBOARD_SIZE] memory) {
-        return leaderboard;
+    particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
+    particles = particles.filter(p => p.life > 0);
+  }
+
+  function loop(){
+    if (!running) return;
+    update();
+    draw();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function startGame(ranked){
+    resetGame();
+    isRankedRun = ranked;
+    startMsg.hidden = true;
+    overMsg.hidden = true;
+    running = true;
+    loop();
+  }
+
+  function endGame(){
+    running = false;
+    cancelAnimationFrame(rafId);
+    finalScoreEl.textContent = String(score);
+    overMsg.hidden = false;
+    lastFinishedScore = score;
+    lastFinishedWasRanked = isRankedRun;
+    updateSubmitAvailability();
+  }
+
+  document.getElementById("practiceBtn").addEventListener("click", () => startGame(false));
+  document.getElementById("retryPracticeBtn").addEventListener("click", () => startGame(false));
+  document.getElementById("compeleBtn").addEventListener("click", enterRankedAndStart);
+  document.getElementById("retryRankedBtn").addEventListener("click", enterRankedAndStart);
+
+  function moveGuardianTo(clientX){
+    const rect = canvas.getBoundingClientRect();
+    const scale = W / rect.width;
+    const x = (clientX - rect.left) * scale;
+    guardianX = Math.min(W - GUARDIAN_W/2, Math.max(GUARDIAN_W/2, x));
+  }
+  canvas.addEventListener("mousemove", e => moveGuardianTo(e.clientX));
+  canvas.addEventListener("mousedown", () => { if (running) fireBullet(); });
+  canvas.addEventListener("touchmove", e => {
+    moveGuardianTo(e.touches[0].clientX);
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener("touchstart", () => { if (running) fireBullet(); });
+
+  const keys = {};
+  window.addEventListener("keydown", e => {
+    keys[e.key] = true;
+    if (e.key === " ") e.preventDefault();
+  });
+  window.addEventListener("keyup", e => { keys[e.key] = false; });
+  setInterval(() => {
+    if (!running) return;
+    if (keys["ArrowLeft"]) guardianX = Math.max(GUARDIAN_W/2, guardianX - 9);
+    if (keys["ArrowRight"]) guardianX = Math.min(W - GUARDIAN_W/2, guardianX + 9);
+  }, 16);
+
+  resetGame();
+  draw();
+
+  let provider = null, signer = null, contract = null, userAddress = null;
+
+  const connectBtn = document.getElementById("connectBtn");
+  const statusDot = document.getElementById("statusDot");
+  const walletStatus = document.getElementById("walletStatus");
+  const walletAddr = document.getElementById("walletAddr");
+  const walletNet = document.getElementById("walletNet");
+  const bestScoreVal = document.getElementById("bestScoreVal");
+  const roundsVal = document.getElementById("roundsVal");
+  const trophiesVal = document.getElementById("trophiesVal");
+  const submitBtn = document.getElementById("submitBtn");
+  const txNote = document.getElementById("txNote");
+  const prizePoolVal = document.getElementById("prizePoolVal");
+  const prizeNote = document.getElementById("prizeNote");
+  const claimBtn = document.getElementById("claimBtn");
+  const leaderboardList = document.getElementById("leaderboardList");
+
+  function shortAddr(a){ return a.slice(0,6) + "…" + a.slice(-4); }
+  function fmtUsdc(raw){ return (Number(raw) / 1e6).toFixed(2) + " USDC"; }
+
+  async function connectWallet(){
+    if (!window.ethereum){
+      txNote.textContent = "No wallet found. Install MetaMask or another EVM wallet extension.";
+      return;
+    }
+    try{
+      provider = new ethers.BrowserProvider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = await provider.getSigner();
+      userAddress = await signer.getAddress();
+
+      await ensureArcNetwork();
+
+      const network = await provider.getNetwork();
+      walletStatus.textContent = "connected";
+      statusDot.classList.add("on");
+      walletAddr.textContent = shortAddr(userAddress);
+      walletNet.textContent = network.chainId.toString() === "5042002" ? "Arc Testnet" : `chainId ${network.chainId}`;
+      connectBtn.textContent = "Wallet connected";
+      connectBtn.disabled = true;
+
+      if (CONTRACT_ADDRESS){
+        contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        await refreshOnchainState();
+      } else {
+        txNote.textContent = "CONTRACT_ADDRESS is not set in frontend/index.html — deploy VaultDefender.sol and paste the address in.";
+      }
+      updateSubmitAvailability();
+    } catch(err){
+      console.error(err);
+      txNote.textContent = "Connection failed: " + (err && err.message ? err.message : err);
+    }
+  }
+
+  async function ensureArcNetwork(){
+    const addChainParams = [{
+      chainId: ARC_TESTNET.chainIdHex,
+      chainName: ARC_TESTNET.chainName,
+      nativeCurrency: ARC_TESTNET.nativeCurrency,
+      rpcUrls: ARC_TESTNET.rpcUrls,
+      blockExplorerUrls: ARC_TESTNET.blockExplorerUrls,
+    }];
+    try{
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: ARC_TESTNET.chainIdHex }],
+      });
+      return;
+    } catch(switchErr){
+      const looksUnrecognized =
+        switchErr.code === 4902 ||
+        (switchErr.message && /unrecognized chain|not.*added|4902/i.test(switchErr.message));
+      if (!looksUnrecognized) throw switchErr;
+    }
+    await window.ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: addChainParams,
+    });
+  }
+
+  async function refreshOnchainState(){
+    if (!contract || !userAddress) return;
+    try{
+      const [best, rounds, trophies] = await contract.getPlayerStats(userAddress);
+      bestScoreVal.textContent = best.toString();
+      roundsVal.textContent = rounds.toString();
+      trophiesVal.textContent = trophies.toString();
+
+      const pool = await contract.prizePool();
+      prizePoolVal.textContent = fmtUsdc(pool);
+
+      const board = await contract.getLeaderboard();
+      renderLeaderboard(board);
+      updateClaimAvailability(board, pool);
+    } catch(err){
+      console.error(err);
+    }
+  }
+
+  function renderLeaderboard(board){
+    const entries = board
+      .filter(e => e.player !== ethers.ZeroAddress)
+      .sort((a,b) => Number(b.score) - Number(a.score));
+
+    if (entries.length === 0){
+      leaderboardList.innerHTML = `<li class="leaderboard-empty">No scores yet — be the first defender!</li>`;
+      return;
     }
 
-    function getPlayerStats(address player)
-        external
-        view
-        returns (uint256 best, uint256 rounds, uint256 trophies, bool activeRound)
-    {
-        return (bestScore[player], roundsPlayed[player], trophyCount[player], hasActiveRound[player]);
+    leaderboardList.innerHTML = entries.map((e, i) => {
+      const isYou = userAddress && e.player.toLowerCase() === userAddress.toLowerCase();
+      return `
+      <li class="${isYou ? "you" : ""}">
+        <span><span class="rank">#${i+1}</span>${shortAddr(e.player)}${isYou ? " (you)" : ""}</span>
+        <b>${e.score.toString()}</b>
+      </li>
+    `;
+    }).join("");
+  }
+
+  function updateClaimAvailability(board, pool){
+    const top = board.find(e => e.player !== ethers.ZeroAddress);
+    const isTop = top && userAddress && top.player.toLowerCase() === userAddress.toLowerCase();
+    claimBtn.disabled = !(contract && isTop && pool > 0n);
+    if (isTop && pool > 0n){
+      prizeNote.textContent = "You are the #1 defender — claim the pool and mint your Trophy NFT.";
+    } else if (isTop){
+      prizeNote.textContent = "You are #1, but the pool is currently empty.";
+    } else {
+      prizeNote.textContent = "Only the current #1 defender can claim the pool — claiming also mints a Trophy NFT.";
     }
+  }
 
-    function _tryInsertLeaderboard(address player, uint256 score) internal {
-        if (leaderboardLength == LEADERBOARD_SIZE && score <= leaderboard[LEADERBOARD_SIZE - 1].score) {
-            return;
-        }
+  function updateSubmitAvailability(){
+    const canSubmit = !running && lastFinishedWasRanked && lastFinishedScore > 0;
+    submitBtn.disabled = !(contract && userAddress && canSubmit);
+  }
 
-        uint256 len = leaderboardLength;
-        for (uint256 i = 0; i < len; i++) {
-            if (leaderboard[i].player == player) {
-                for (uint256 j = i; j < len - 1; j++) {
-                    leaderboard[j] = leaderboard[j + 1];
-                }
-                len -= 1;
-                delete leaderboard[len];
-                break;
-            }
-        }
-
-        uint256 insertAt = len;
-        for (uint256 i = 0; i < len; i++) {
-            if (score > leaderboard[i].score) {
-                insertAt = i;
-                break;
-            }
-        }
-
-        if (insertAt >= LEADERBOARD_SIZE) {
-            leaderboardLength = len;
-            return;
-        }
-
-        uint256 newLen = len < LEADERBOARD_SIZE ? len + 1 : LEADERBOARD_SIZE;
-        for (uint256 k = newLen - 1; k > insertAt; k--) {
-            leaderboard[k] = leaderboard[k - 1];
-        }
-
-        leaderboard[insertAt] = Entry({player: player, score: score, timestamp: block.timestamp});
-        leaderboardLength = newLen;
-
-        emit LeaderboardUpdated(player, score, insertAt);
+  async function enterRankedAndStart(){
+    if (!contract || !userAddress){
+      txNote.textContent = "Connect your wallet first to enter a ranked round.";
+      return;
     }
-
-    // ---------------------------------------------------------------
-    // Minimal ERC721 implementation (trophy badges only, non-transferable
-    // logic kept simple: standard transfer/approval flow still works so
-    // trophies remain compatible with wallets and explorers)
-    // ---------------------------------------------------------------
-
-    function _mintTrophy(address to, uint256 scoreAtMint) internal returns (uint256 tokenId) {
-        tokenId = nextTokenId++;
-        _owners[tokenId] = to;
-        _balances[to] += 1;
-        trophyScore[tokenId] = scoreAtMint;
-        trophyCount[to] += 1;
-        emit Transfer(address(0), to, tokenId);
+    document.getElementById("compeleBtn").disabled = true;
+    document.getElementById("retryRankedBtn").disabled = true;
+    txNote.textContent = `Staking ${ENTRY_FEE_LABEL} to enter — confirm the transaction in your wallet…`;
+    try{
+      const tx = await contract.enterRound({ value: ENTRY_FEE_RAW });
+      txNote.innerHTML = `Waiting for confirmation… <a href="https://testnet.arcscan.app/tx/${tx.hash}" target="_blank" rel="noopener">tx</a>`;
+      await tx.wait();
+      txNote.textContent = "Round entered — good luck, defender!";
+      startGame(true);
+      await refreshOnchainState();
+    } catch(err){
+      console.error(err);
+      txNote.textContent = "Could not enter round: " + (err && err.shortMessage ? err.shortMessage : err.message);
+    } finally {
+      document.getElementById("compeleBtn").disabled = false;
+      document.getElementById("retryRankedBtn").disabled = false;
     }
+  }
 
-    function balanceOf(address owner) external view returns (uint256) {
-        require(owner != address(0), "zero address");
-        return _balances[owner];
+  async function submitScoreOnchain(){
+    if (!contract){
+      txNote.textContent = "Connect your wallet and make sure the contract is deployed first.";
+      return;
     }
-
-    function ownerOf(uint256 tokenId) public view returns (address owner) {
-        owner = _owners[tokenId];
-        require(owner != address(0), "token does not exist");
+    submitBtn.disabled = true;
+    txNote.textContent = "Submitting your score to Arc…";
+    try{
+      const tx = await contract.submitScore(lastFinishedScore);
+      txNote.innerHTML = `Waiting for confirmation… <a href="https://testnet.arcscan.app/tx/${tx.hash}" target="_blank" rel="noopener">tx</a>`;
+      await tx.wait();
+      txNote.textContent = "Score recorded on-chain ✅";
+      lastFinishedWasRanked = false;
+      await refreshOnchainState();
+    } catch(err){
+      console.error(err);
+      txNote.textContent = "Transaction failed: " + (err && err.shortMessage ? err.shortMessage : err.message);
+    } finally {
+      updateSubmitAvailability();
     }
+  }
 
-    function approve(address to, uint256 tokenId) external {
-        address owner = ownerOf(tokenId);
-        require(to != owner, "approve to owner");
-        require(msg.sender == owner || _operatorApprovals[owner][msg.sender], "not authorized");
-        _tokenApprovals[tokenId] = to;
-        emit Approval(owner, to, tokenId);
+  async function claimPrizeOnchain(){
+    if (!contract) return;
+    claimBtn.disabled = true;
+    prizeNote.textContent = "Claiming prize pool and minting your Trophy NFT…";
+    try{
+      const tx = await contract.claimPrize();
+      prizeNote.innerHTML = `Waiting for confirmation… <a href="https://testnet.arcscan.app/tx/${tx.hash}" target="_blank" rel="noopener">tx</a>`;
+      await tx.wait();
+      prizeNote.textContent = "Prize claimed and Trophy NFT minted 🏆";
+      await refreshOnchainState();
+    } catch(err){
+      console.error(err);
+      prizeNote.textContent = "Claim failed: " + (err && err.shortMessage ? err.shortMessage : err.message);
     }
+  }
 
-    function getApproved(uint256 tokenId) external view returns (address) {
-        ownerOf(tokenId);
-        return _tokenApprovals[tokenId];
-    }
+  connectBtn.addEventListener("click", connectWallet);
+  submitBtn.addEventListener("click", submitScoreOnchain);
+  claimBtn.addEventListener("click", claimPrizeOnchain);
 
-    function setApprovalForAll(address operator, bool approved) external {
-        require(operator != msg.sender, "approve to self");
-        _operatorApprovals[msg.sender][operator] = approved;
-        emit ApprovalForAll(msg.sender, operator, approved);
-    }
-
-    function isApprovedForAll(address owner, address operator) external view returns (bool) {
-        return _operatorApprovals[owner][operator];
-    }
-
-    function transferFrom(address from, address to, uint256 tokenId) public {
-        require(ownerOf(tokenId) == from, "from is not owner");
-        require(to != address(0), "transfer to zero address");
-        require(
-            msg.sender == from ||
-            _tokenApprovals[tokenId] == msg.sender ||
-            _operatorApprovals[from][msg.sender],
-            "not authorized"
-        );
-
-        delete _tokenApprovals[tokenId];
-        _balances[from] -= 1;
-        _balances[to] += 1;
-        _owners[tokenId] = to;
-
-        emit Transfer(from, to, tokenId);
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId) external {
-        safeTransferFrom(from, to, tokenId, "");
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public {
-        transferFrom(from, to, tokenId);
-        if (to.code.length > 0) {
-            (bool ok, bytes memory ret) = to.call(
-                abi.encodeWithSelector(
-                    bytes4(keccak256("onERC721Received(address,address,uint256,bytes)")),
-                    msg.sender, from, tokenId, data
-                )
-            );
-            require(ok, "receiver call failed");
-            bytes4 retval = abi.decode(ret, (bytes4));
-            require(retval == bytes4(keccak256("onERC721Received(address,address,uint256,bytes)")), "unsafe receiver");
-        }
-    }
-
-    function tokenURI(uint256 tokenId) external view returns (string memory) {
-        ownerOf(tokenId);
-        return string(
-            abi.encodePacked(
-                "data:application/json,%7B%22name%22:%22Vault%20Defender%20Trophy%20%23",
-                _toString(tokenId),
-                "%22,%22description%22:%22Awarded%20for%20topping%20the%20Vault%20Defender%20leaderboard%20on%20Arc%22,%22attributes%22:%5B%7B%22trait_type%22:%22Score%22,%22value%22:",
-                _toString(trophyScore[tokenId]),
-                "%7D%5D%7D"
-            )
-        );
-    }
-
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == 0x80ac58cd || interfaceId == 0x01ffc9a7; // ERC721, ERC165
-    }
-
-    function _toString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) return "0";
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + (value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
-    }
-}
+  if (window.ethereum){
+    window.ethereum.on && window.ethereum.on("accountsChanged", () => window.location.reload());
+    window.ethereum.on && window.ethereum.on("chainChanged", () => window.location.reload());
+  }
+})();
+</script>
+</body>
+</html>
