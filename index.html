@@ -757,22 +757,32 @@
     });
   }
 
-  async function refreshOnchainState(){
+ async function refreshOnchainState(){
     if (!contract || !userAddress) return;
     try{
       const [best, rounds, trophies] = await contract.getPlayerStats(userAddress);
       bestScoreVal.textContent = best.toString();
       roundsVal.textContent = rounds.toString();
       trophiesVal.textContent = trophies.toString();
+    } catch(err){
+      console.error("getPlayerStats failed:", err);
+    }
 
-      const pool = await contract.prizePool();
+    let pool = 0n;
+    try{
+      pool = await contract.prizePool();
       prizePoolVal.textContent = fmtUsdc(pool);
+    } catch(err){
+      console.error("prizePool failed:", err);
+    }
 
+    try{
       const board = await contract.getLeaderboard();
       renderLeaderboard(board);
       updateClaimAvailability(board, pool);
     } catch(err){
-      console.error(err);
+      console.error("getLeaderboard failed:", err);
+      leaderboardList.innerHTML = `<li class="leaderboard-empty">Couldn't load the leaderboard (network hiccup) — try again in a moment.</li>`;
     }
   }
 
