@@ -558,8 +558,8 @@
     if (vaultHp <= 0) endGame();
   }
 
-  function update(){
-    spawnTimer++;
+  function update(dt){
+    spawnTimer += dt;
     const interval = Math.max(28, 62 - Math.floor(score / 8));
     if (spawnTimer > interval){
       spawnTimer = 0;
@@ -567,20 +567,20 @@
       difficulty = 1 + score / 250;
     }
 
-    fireTimer++;
+    fireTimer += dt;
     if (keys[" "] && fireTimer > 9){
       fireTimer = 0;
       fireBullet();
     }
 
-    bullets.forEach(b => b.y += b.vy);
+    bullets.forEach(b => b.y += b.vy * dt);
     bullets = bullets.filter(b => b.y > -10);
 
     enemies.forEach(e => {
-      e.wobble += e.wobbleSpeed;
-      e.x += Math.sin(e.wobble) * (e.type === "spike" ? 1.6 : 0.4);
+      e.wobble += e.wobbleSpeed * dt;
+      e.x += Math.sin(e.wobble) * (e.type === "spike" ? 1.6 : 0.4) * dt;
       e.x = Math.min(W - e.r, Math.max(e.r, e.x));
-      e.y += e.speed;
+      e.y += e.speed * dt;
     });
 
     for (let bi = bullets.length - 1; bi >= 0; bi--){
@@ -613,13 +613,19 @@
       }
     }
 
-    particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
+    particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; });
     particles = particles.filter(p => p.life > 0);
   }
 
-  function loop(){
+  let lastFrameTime = null;
+  function loop(timestamp){
     if (!running) return;
-    update();
+    if (lastFrameTime === null) lastFrameTime = timestamp;
+    let dt = (timestamp - lastFrameTime) / (1000 / 60);
+    dt = Math.min(dt, 3);
+    lastFrameTime = timestamp;
+
+    update(dt);
     draw();
     rafId = requestAnimationFrame(loop);
   }
@@ -630,7 +636,8 @@
     startMsg.hidden = true;
     overMsg.hidden = true;
     running = true;
-    loop();
+    lastFrameTime = null;
+    rafId = requestAnimationFrame(loop);
   }
 
   function endGame(){
@@ -757,7 +764,7 @@
     });
   }
 
- async function refreshOnchainState(){
+  async function refreshOnchainState(){
     if (!contract || !userAddress) return;
     try{
       const [best, rounds, trophies] = await contract.getPlayerStats(userAddress);
@@ -769,7 +776,14 @@
     }
 
     let pool = 0n;
- try{
+    try{
+      pool = await contract.prizePool();
+      prizePoolVal.textContent = fmtUsdc(pool);
+    } catch(err){
+      console.error("prizePool failed:", err);
+    }
+
+    try{
       const board = await contract.getLeaderboard();
       renderLeaderboard(board);
       updateClaimAvailability(board, pool);
@@ -790,6 +804,7 @@
         leaderboardList.innerHTML = `<li class="leaderboard-empty">Couldn't load the leaderboard (network hiccup) — try again in a moment.</li>`;
       }
     }
+  }
 
   function renderLeaderboard(board){
     const entries = board
