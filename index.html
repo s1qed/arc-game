@@ -292,17 +292,14 @@
 (function(){
   "use strict";
 
-  // =====================================================================
-  // 1. CONFIG — fill in the contract address after deploying VaultDefender.sol
-  // =====================================================================
   const CONTRACT_ADDRESS = "0x60D44ADE7Ce45e3d52aa51C1A4d189D891020271";
   const CONTRACT_ABI = [{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"approved","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"operator","type":"address"},{"indexed":false,"internalType":"bool","name":"approved","type":"bool"}],"name":"ApprovalForAll","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"score","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"rank","type":"uint256"}],"name":"LeaderboardUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"oldBest","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newBest","type":"uint256"}],"name":"NewPersonalBest","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"PrizeClaimed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"fee","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newPoolTotal","type":"uint256"}],"name":"RoundEntered","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"player","type":"address"},{"indexed":false,"internalType":"uint256","name":"score","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"ScoreSubmitted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[],"name":"ENTRY_FEE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"LEADERBOARD_SIZE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"approve","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"bestScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"claimPrize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"enterRound","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getApproved","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getLeaderboard","outputs":[{"components":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"score","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"internalType":"struct VaultDefender.Entry[10]","name":"","type":"tuple[10]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"getPlayerStats","outputs":[{"internalType":"uint256","name":"best","type":"uint256"},{"internalType":"uint256","name":"rounds","type":"uint256"},{"internalType":"uint256","name":"trophies","type":"uint256"},{"internalType":"bool","name":"activeRound","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"hasActiveRound","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"operator","type":"address"}],"name":"isApprovedForAll","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"leaderboard","outputs":[{"internalType":"address","name":"player","type":"address"},{"internalType":"uint256","name":"score","type":"uint256"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"leaderboardLength","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"nextTokenId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"owner","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"prizePool","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"roundsPlayed","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"operator","type":"address"},{"internalType":"bool","name":"approved","type":"bool"}],"name":"setApprovalForAll","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"score","type":"uint256"}],"name":"submitScore","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bytes4","name":"interfaceId","type":"bytes4"}],"name":"supportsInterface","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"pure","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"tokenURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"trophyCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"trophyScore","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
 
-  const ENTRY_FEE_RAW = 100000n; // 0.10 USDC, 6 decimals — must match ENTRY_FEE in the contract
+  const ENTRY_FEE_RAW = 100000n;
   const ENTRY_FEE_LABEL = "0.10 USDC";
 
   const ARC_TESTNET = {
-    chainIdHex: "0x4cef52",     // 5042002
+    chainIdHex: "0x4cef52",
     chainName: "Arc Testnet",
     nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
     rpcUrls: ["https://rpc.testnet.arc.network"],
@@ -312,9 +309,6 @@
   document.getElementById("contractAddrFooter").textContent =
     CONTRACT_ADDRESS || "address not set — fill in after deployment";
 
-  // =====================================================================
-  // 2. GAME (canvas shooter — works offline in Practice mode too)
-  // =====================================================================
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
   const scoreEl = document.getElementById("scoreVal");
@@ -361,9 +355,6 @@
     ghost: { r: 17, hp: 2, speed: 0.9,  points: 20, color: "#9AA5E8", dark: "#141936", sprite: "ghost" },
   };
 
-  // ---------------------------------------------------------------
-  // Pixel-art sprites (drawn as grids of squares, no external images)
-  // ---------------------------------------------------------------
   const SPRITES = {
     guardian: {
       rows: [
@@ -630,8 +621,8 @@
   function loop(timestamp){
     if (!running) return;
     if (lastFrameTime === null) lastFrameTime = timestamp;
-    let dt = (timestamp - lastFrameTime) / (1000 / 60); // normalize to "60fps units"
-    dt = Math.min(dt, 3); // clamp huge gaps (tab switch, lag spikes)
+    let dt = (timestamp - lastFrameTime) / (1000 / 60);
+    dt = Math.min(dt, 3);
     lastFrameTime = timestamp;
 
     update(dt);
@@ -693,9 +684,6 @@
   resetGame();
   draw();
 
-  // =====================================================================
-  // 3. WEB3 / ARC — wallet connection, staking, submitting, claiming
-  // =====================================================================
   let provider = null, signer = null, contract = null, userAddress = null;
 
   const connectBtn = document.getElementById("connectBtn");
@@ -740,6 +728,7 @@
       if (CONTRACT_ADDRESS){
         contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
         await refreshOnchainState();
+        startAutoRefresh();
       } else {
         txNote.textContent = "CONTRACT_ADDRESS is not set in frontend/index.html — deploy VaultDefender.sol and paste the address in.";
       }
@@ -776,43 +765,49 @@
     });
   }
 
+  async function withRetry(fn, attempts, delayMs){
+    let lastErr;
+    for (let i = 0; i < attempts; i++){
+      try{
+        return await fn();
+      } catch(err){
+        lastErr = err;
+        if (i < attempts - 1) await new Promise(res => setTimeout(res, delayMs));
+      }
+    }
+    throw lastErr;
+  }
+
   async function refreshOnchainState(){
     if (!contract || !userAddress) return;
     try{
-      const [best, rounds, trophies] = await contract.getPlayerStats(userAddress);
+      const [best, rounds, trophies] = await withRetry(() => contract.getPlayerStats(userAddress), 3, 500);
       bestScoreVal.textContent = best.toString();
       roundsVal.textContent = rounds.toString();
       trophiesVal.textContent = trophies.toString();
     } catch(err){
-      console.error("getPlayerStats failed:", err);
+      console.error("getPlayerStats failed after retries:", err);
     }
 
     let pool = 0n;
     try{
-      pool = await contract.prizePool();
+      pool = await withRetry(() => contract.prizePool(), 3, 500);
       prizePoolVal.textContent = fmtUsdc(pool);
     } catch(err){
-      console.error("prizePool failed:", err);
+      console.error("prizePool failed after retries:", err);
     }
 
     try{
-      let board;
-      try{
-        board = await contract.getLeaderboard();
-      } catch(firstErr){
-        console.warn("getLeaderboard first attempt failed, retrying once:", firstErr);
-        await new Promise(res => setTimeout(res, 400));
-        board = await contract.getLeaderboard();
-      }
+      const board = await withRetry(() => contract.getLeaderboard(), 3, 600);
       renderLeaderboard(board);
       updateClaimAvailability(board, pool);
     } catch(err){
-      console.error("getLeaderboard failed, trying sequential fallback:", err);
+      console.error("getLeaderboard failed after retries, trying sequential fallback:", err);
       try{
-        const len = await contract.leaderboardLength();
+        const len = await withRetry(() => contract.leaderboardLength(), 3, 500);
         const rows = [];
         for (let i = 0; i < Number(len); i++){
-          const r = await contract.leaderboard(i);
+          const r = await withRetry(() => contract.leaderboard(i), 3, 400);
           rows.push(r);
           if (i < Number(len) - 1) await new Promise(res => setTimeout(res, 250));
         }
@@ -821,9 +816,17 @@
         updateClaimAvailability(board, pool);
       } catch(fallbackErr){
         console.error("leaderboard sequential fallback also failed:", fallbackErr);
-        leaderboardList.innerHTML = `<li class="leaderboard-empty">Couldn't load the leaderboard (network hiccup) — try again in a moment.</li>`;
+        leaderboardList.innerHTML = `<li class="leaderboard-empty">Couldn't load the leaderboard (network hiccup) — retrying automatically…</li>`;
       }
     }
+  }
+
+  let pollTimer = null;
+  function startAutoRefresh(){
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      if (contract && userAddress && !running) refreshOnchainState();
+    }, 15000);
   }
 
   function renderLeaderboard(board){
