@@ -784,27 +784,34 @@
     }
 
     try{
-      const board = await contract.getLeaderboard();
+      let board;
+      try{
+        board = await contract.getLeaderboard();
+      } catch(firstErr){
+        console.warn("getLeaderboard first attempt failed, retrying once:", firstErr);
+        await new Promise(res => setTimeout(res, 400));
+        board = await contract.getLeaderboard();
+      }
       renderLeaderboard(board);
       updateClaimAvailability(board, pool);
     } catch(err){
-      console.error("getLeaderboard failed, trying fallback:", err);
+      console.error("getLeaderboard failed, trying sequential fallback:", err);
       try{
         const len = await contract.leaderboardLength();
-        const calls = [];
+        const rows = [];
         for (let i = 0; i < Number(len); i++){
-          calls.push(contract.leaderboard(i));
+          const r = await contract.leaderboard(i);
+          rows.push(r);
+          if (i < Number(len) - 1) await new Promise(res => setTimeout(res, 250));
         }
-        const rows = await Promise.all(calls);
         const board = rows.map(r => ({ player: r.player, score: r.score, timestamp: r.timestamp }));
         renderLeaderboard(board);
         updateClaimAvailability(board, pool);
       } catch(fallbackErr){
-        console.error("leaderboard fallback also failed:", fallbackErr);
+        console.error("leaderboard sequential fallback also failed:", fallbackErr);
         leaderboardList.innerHTML = `<li class="leaderboard-empty">Couldn't load the leaderboard (network hiccup) — try again in a moment.</li>`;
       }
     }
-  }
 
   function renderLeaderboard(board){
     const entries = board
